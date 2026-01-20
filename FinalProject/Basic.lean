@@ -1,7 +1,11 @@
+import Mathlib.Data.Set.Basic
 set_option autoImplicit false
-
+set_option linter.style.longLine false
+set_option linter.style.commandStart false
+set_option linter.style.cdot false
+set_option linter.flexible false
 structure Signature where
-  Rel   : Type
+  Rel : Type
   Func  : Type
   Const : Type
   arityRel  : Rel → Nat
@@ -26,6 +30,7 @@ inductive Formula (τ : Signature) where
 namespace Formula
 
 infixr:70 " ⇒ " => imp
+infixr:70 " =ₚ " => eq
 
 prefix:100 "∼" => neg
 
@@ -69,7 +74,78 @@ def evalFormula {τ : Signature} (M : Structure τ) (ρ : Env M.U) : Formula τ 
 | Formula.rel r ts   => M.relInterp r (fun i => evalTerm M ρ (ts i))
 | Formula.neg φ      => ¬ evalFormula M ρ φ
 | Formula.imp φ ψ    => evalFormula M ρ φ → evalFormula M ρ ψ
-| Formula.forAll x φ => ∀ a : M.U, evalFormula M (fun v => if v = x then a else ρ v) φ
+| Formula.forAll x φ => ∀ a : M.U, evalFormula M (updateEnv ρ x a)  φ
+
+
+theorem evalFormula_neg {τ : Signature} (M : Structure τ) (ρ : Env M.U) (ψ: Formula τ): evalFormula  M ρ (∼ ψ) ↔ ¬ evalFormula  M ρ (ψ) := by
+  rfl
+
+theorem evalFormula_imp {τ : Signature} (M : Structure τ) (ρ : Env M.U) (ψ φ: Formula τ): evalFormula M ρ (φ ⇒ ψ ) ↔ evalFormula  M ρ φ → evalFormula  M ρ ψ  := by
+  rfl
+
+theorem evalFormula_forAll {τ : Signature } {x:Var} (M : Structure τ) (ρ : Env M.U) ( φ: Formula τ): evalFormula M ρ (∀ₚ x φ ) ↔ (∀ a : M.U, evalFormula M (updateEnv ρ x a)  φ) := by
+  rfl
+--  (∼ φ) ⇒ ψ
+theorem evalFormula_disj {τ : Signature} (M : Structure τ) (ρ : Env M.U) (ψ φ: Formula τ): evalFormula M ρ (φ ⋁ ψ ) ↔ evalFormula  M ρ φ ∨ evalFormula  M ρ ψ  := by
+  apply Iff.intro
+  . intros h
+    unfold Formula.disj at h
+    rw [evalFormula_imp] at h
+    rw [evalFormula_neg] at h
+    by_cases ip : (evalFormula M ρ φ)
+    . exact Or.inl ip
+    . have j := h ip
+      exact Or.inr j
+  . intros h
+    unfold Formula.disj
+    unfold evalFormula
+    rw [evalFormula_neg]
+    intros ip
+    cases h
+    . contradiction
+    . assumption
+
+theorem evalFormula_conj {τ : Signature} (M : Structure τ) (ρ : Env M.U) (ψ φ: Formula τ): evalFormula M ρ (φ ⋀ ψ ) ↔ evalFormula  M ρ φ ∧ evalFormula  M ρ ψ  := by
+  apply Iff.intro
+  . intros h
+    unfold Formula.conj at h
+    rw [evalFormula_neg] at h
+    rw [evalFormula_imp] at h
+    rw [evalFormula_neg] at h
+    rw [Classical.not_imp] at h
+    rw [Classical.not_not] at h
+    assumption
+  . intros h
+    unfold Formula.conj
+    unfold evalFormula
+    rw [evalFormula_imp]
+    rw [evalFormula_neg]
+    rw [Classical.not_imp]
+    rw [Classical.not_not]
+    assumption
+
+theorem evalFormula_exists {τ : Signature } {x:Var} (M : Structure τ) (ρ : Env M.U) ( φ: Formula τ): evalFormula M ρ (∃ₚ x φ ) ↔ (∃ a : M.U, evalFormula M (updateEnv ρ x a) φ) := by
+  apply Iff.intro
+  . intros ip
+    unfold Formula.exist at ip
+    rw [evalFormula_neg] at ip
+    rw [evalFormula_forAll] at ip
+    rw [Classical.not_forall] at ip
+    obtain ⟨y, ip_y⟩ := ip
+    rw [evalFormula_neg] at ip_y
+    rw [Classical.not_not] at ip_y
+    exists y
+  . intros ip
+    unfold Formula.exist
+    rw [evalFormula_neg]
+    rw [evalFormula_forAll]
+    rw [Classical.not_forall]
+    obtain ⟨y, ip_y⟩ := ip
+    exists y
+    rw [evalFormula_neg]
+    rw [Classical.not_not]
+    assumption
+
 
 
 def satisfiable {τ : Signature} (φ : Formula τ) : Prop :=
@@ -123,8 +199,40 @@ def addT (t1 t2 : Term PA_Sig) : Term PA_Sig :=
 def mulT (t1 t2 : Term PA_Sig) : Term PA_Sig :=
   Term.func PA_Func.mul (fun i => if i.val = 0 then t1 else t2)
 
-#check addT y z
-#check S x
+def eqT (t1 t2 : Term PA_Sig) : Formula PA_Sig :=
+  Formula.rel PA_Rel.eq
+    (fun
+      | ⟨0, _⟩ => t1
+      | ⟨1, _⟩ => t2 )
+
+notation "S(" t ")" => S t
+notation t₁ " +ₚ " t₂ => addT t₁ t₂
+notation t₁ " ×ₚ " t₂ => mulT t₁ t₂
+notation t₁ " =ₚ " t₂ => eqT t₁ t₂
+
+
+#check x +ₚ y
+#check S (x)
+
+
+def PA_ax1 (x:Var): Formula PA_Sig :=
+  Formula.forAll x (Formula.neg (Formula.eq (S(Term.var x)) zero))
+
+def PA_ax2 {x y: Var}: Formula PA_Sig :=
+  Formula.forAll x (Formula.forAll y (Formula.imp (Formula.eq (S(Term.var x)) (S(Term.var y))) (Formula.eq (Term.var x) (Term.var y))))
+
+def PA_ax3 {x:Var}: Formula PA_Sig :=
+  Formula.forAll x (Formula.eq (addT (Term.var x) zero) (Term.var x))
+
+def PA_ax4 {x y: Var}: Formula PA_Sig :=
+  Formula.forAll x (Formula.forAll y (Formula.eq (addT (Term.var x) (S(Term.var y))) (S(addT (Term.var x) (Term.var y)))))
+
+def PA_ax5 {x:Var} : Formula PA_Sig :=
+  Formula.forAll x (Formula.eq (mulT (Term.var x) zero) zero)
+
+def PA_ax6 {x y:Var}: Formula PA_Sig :=
+  Formula.forAll x (Formula.forAll y (Formula.eq (mulT (Term.var x) (S(Term.var y))) (addT (mulT (Term.var x) (Term.var y)) (Term.var x))))
+
 
 
 def fin0 : Fin 1 := ⟨0, by decide⟩
@@ -143,32 +251,46 @@ def PA_Std : Structure PA_Sig :=
   | PA_Func.mul  => args fin0of2 * args fin1of2
   relInterp := fun r args =>
   match r with
-  | PA_Rel.eq => args ⟨0, by decide⟩ = args ⟨1, by decide⟩
+  | PA_Rel.eq => args fin0of2 = args fin1of2
 
 }
-
-def PA_ax1 : Formula PA_Sig :=
-  Formula.forAll Nat.zero (Formula.neg (Formula.eq (S x) zero))
-
-def PA_ax2 : Formula PA_Sig :=
-  Formula.forAll Nat.zero (Formula.forAll (Nat.succ Nat.zero) (Formula.imp (Formula.eq (S x) (S y)) (Formula.eq x y)))
-
-def PA_ax3 : Formula PA_Sig :=
-  Formula.forAll  Nat.zero (Formula.eq (addT x zero) x)
-
-def PA_ax4 : Formula PA_Sig :=
-  Formula.forAll Nat.zero (Formula.forAll (Nat.succ Nat.zero) (Formula.eq (addT x (S y)) (S (addT x y))))
-
-def PA_ax5 : Formula PA_Sig :=
-  Formula.forAll Nat.zero (Formula.eq (mulT x zero) zero)
-
-def PA_ax6 : Formula PA_Sig :=
-  Formula.forAll Nat.zero (Formula.forAll (Nat.succ Nat.zero) (Formula.eq (mulT x (S y)) (addT (mulT x y) x)))
-
-#check evalFormula PA_Std (fun _ => Nat.zero) PA_ax1
-
 
 def t5 : Term PA_Sig :=
   S (S (S (S (S zero))))
 
 #eval evalTerm PA_Std (fun _ => Nat.zero) (S t5)
+
+
+theorem eval_zero (ρ) : evalTerm PA_Std ρ (Term.const PA_Const.zero) = (0 : ℕ) := by
+  rfl
+
+theorem eval_succ (ρ) (x) : evalTerm PA_Std ρ (S x) = (Nat.succ (evalTerm _ ρ x)) := by
+  rfl
+
+theorem PA_ax1_satisfiable (x: Var) : satisfiable (PA_ax1 x):= by
+  unfold satisfiable
+  let ρ : Env ℕ := fun _ => Nat.zero
+  use PA_Std
+  use ρ
+  simp [PA_ax1]
+  simp [evalFormula]
+  simp [zero]
+  intro a
+  rw [eval_zero]
+  rw [eval_succ]
+  intros h
+  contradiction
+
+
+theorem PA_ax1_satisfiable2 (x: Var) : ∀ ρ : Env ℕ, evalFormula PA_Std ρ (PA_ax1 x):=by
+    intros ρ
+    simp [PA_ax1]
+    simp [evalFormula]
+    simp [zero]
+    intro a
+    rw [eval_zero]
+    rw [eval_succ]
+    intros h
+    contradiction
+
+-- theorem PA_ax1_satisfiable (x: Var): satisfiable (PA_ax1 x):= by
