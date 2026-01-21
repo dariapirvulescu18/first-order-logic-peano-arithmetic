@@ -148,9 +148,12 @@ theorem evalFormula_exists {τ : Signature } {x:Var} (M : Structure τ) (ρ : En
 
 
 
-def satisfiable {τ : Signature} (φ : Formula τ) : Prop :=
-  ∃ (M : Structure τ) (ρ : Env M.U), evalFormula M ρ φ
+-- def satisfiable {τ : Signature} (φ : Formula τ) : Prop :=
+--   ∃ (M : Structure τ) (ρ : Env M.U), evalFormula M ρ φ
 
+
+def satisfiable {τ : Signature} (φ : Formula τ) : Prop :=
+  ∃ M : Structure τ, ∀ ρ : Env M.U, evalFormula M ρ φ
 
 ------------------------------------------
 
@@ -218,19 +221,19 @@ notation t₁ " =ₚ " t₂ => eqT t₁ t₂
 def PA_ax1 (x:Var): Formula PA_Sig :=
   Formula.forAll x (Formula.neg (Formula.eq (S(Term.var x)) zero))
 
-def PA_ax2 {x y: Var}: Formula PA_Sig :=
+def PA_ax2 (x y: Var): Formula PA_Sig :=
   Formula.forAll x (Formula.forAll y (Formula.imp (Formula.eq (S(Term.var x)) (S(Term.var y))) (Formula.eq (Term.var x) (Term.var y))))
 
-def PA_ax3 {x:Var}: Formula PA_Sig :=
+def PA_ax3 (x:Var): Formula PA_Sig :=
   Formula.forAll x (Formula.eq (addT (Term.var x) zero) (Term.var x))
 
-def PA_ax4 {x y: Var}: Formula PA_Sig :=
+def PA_ax4 (x y: Var): Formula PA_Sig :=
   Formula.forAll x (Formula.forAll y (Formula.eq (addT (Term.var x) (S(Term.var y))) (S(addT (Term.var x) (Term.var y)))))
 
-def PA_ax5 {x:Var} : Formula PA_Sig :=
+def PA_ax5 (x:Var) : Formula PA_Sig :=
   Formula.forAll x (Formula.eq (mulT (Term.var x) zero) zero)
 
-def PA_ax6 {x y:Var}: Formula PA_Sig :=
+def PA_ax6 (x y:Var): Formula PA_Sig :=
   Formula.forAll x (Formula.forAll y (Formula.eq (mulT (Term.var x) (S(Term.var y))) (addT (mulT (Term.var x) (Term.var y)) (Term.var x))))
 
 
@@ -267,21 +270,40 @@ theorem eval_zero (ρ) : evalTerm PA_Std ρ (Term.const PA_Const.zero) = (0 : �
 theorem eval_succ (ρ) (x) : evalTerm PA_Std ρ (S x) = (Nat.succ (evalTerm _ ρ x)) := by
   rfl
 
-theorem PA_ax1_satisfiable (x: Var) : satisfiable (PA_ax1 x):= by
+theorem eval_add (ρ) (x y) :
+  evalTerm PA_Std ρ (addT x y) = Nat.add (evalTerm _ ρ x) (evalTerm _ ρ y) := by rfl
+
+theorem eval_mul (ρ) (x y) :
+  evalTerm PA_Std ρ (mulT x y) = Nat.mul (evalTerm _ ρ x) (evalTerm _ ρ y ):= by rfl
+
+
+theorem eval_eq (ρ) (x y : Term PA_Sig) :
+  evalFormula PA_Std ρ (eqT x y) = (evalTerm PA_Std ρ x = evalTerm PA_Std ρ y) := by rfl
+
+-- theorem PA_ax1_satisfiable (x: Var) : satisfiable (PA_ax1 x):= by
+--   unfold satisfiable
+--   let ρ : Env ℕ := fun _ => Nat.zero
+--   use PA_Std
+--   use ρ
+--   simp [PA_ax1]
+--   simp [evalFormula]
+--   simp [zero]
+--   intro a
+--   rw [eval_zero]
+--   rw [eval_succ]
+--   intros h
+--   contradiction
+
+theorem PA_ax1_satisfiable (x : Var) : satisfiable (PA_ax1 x) := by
   unfold satisfiable
-  let ρ : Env ℕ := fun _ => Nat.zero
   use PA_Std
-  use ρ
-  simp [PA_ax1]
-  simp [evalFormula]
-  simp [zero]
-  intro a
+  intro ρ
+  simp [PA_ax1, evalFormula, zero]
+  intros a
   rw [eval_zero]
   rw [eval_succ]
-  intros h
+  intro h
   contradiction
-
-
 theorem PA_ax1_satisfiable2 (x: Var) : ∀ ρ : Env ℕ, evalFormula PA_Std ρ (PA_ax1 x):=by
     intros ρ
     simp [PA_ax1]
@@ -293,4 +315,66 @@ theorem PA_ax1_satisfiable2 (x: Var) : ∀ ρ : Env ℕ, evalFormula PA_Std ρ (
     intros h
     contradiction
 
--- theorem PA_ax1_satisfiable (x: Var): satisfiable (PA_ax1 x):= by
+theorem PA_ax2_satisfiable (x y: Var): satisfiable (PA_ax2 x y) := by
+  unfold satisfiable
+  use PA_Std
+  intro ρ
+  simp [PA_ax2]
+  simp [evalFormula]
+  intros a k o
+  rw [eval_succ] at o
+  rw [eval_succ] at o
+  apply Nat.succ.inj
+  assumption
+
+theorem PA_ax3_satisfiable (x : Var): satisfiable (PA_ax3 x ) := by
+  unfold satisfiable
+  use PA_Std
+  intro ρ
+  simp [PA_ax3]
+  simp [evalFormula]
+  intros h
+  rw [eval_add]
+  rw [zero]
+  apply Nat.add_zero
+
+
+theorem PA_ax4_satisfiable (x y: Var): satisfiable (PA_ax4 x y) := by
+  unfold satisfiable
+  use PA_Std
+  intro ρ
+  simp [PA_ax4]
+  simp [evalFormula]
+  intros h p
+  rw [eval_add]
+  rw [eval_succ]
+  rw [eval_succ]
+  rw [eval_add]
+  exact Nat.add_succ _ _
+
+
+theorem PA_ax5_satisfiable (x : Var): satisfiable (PA_ax5 x ) := by
+  unfold satisfiable
+  use PA_Std
+  intro ρ
+  simp [PA_ax5]
+  simp [evalFormula]
+  intros h
+  rw [eval_mul]
+  rw [zero]
+  apply Nat.mul_zero
+
+
+
+theorem PA_ax6_satisfiable (x y: Var): satisfiable (PA_ax6 x y ) := by
+  unfold satisfiable
+  use PA_Std
+  intro ρ
+  simp [PA_ax6]
+  simp [evalFormula]
+  intros h p
+  rw [eval_mul]
+  rw [eval_add]
+  rw [eval_mul]
+  rw [eval_succ]
+  apply Nat.mul_succ
