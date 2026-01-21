@@ -4,6 +4,7 @@ set_option linter.style.longLine false
 set_option linter.style.commandStart false
 set_option linter.style.cdot false
 set_option linter.flexible false
+
 structure Signature where
   Rel : Type
   Func  : Type
@@ -236,6 +237,28 @@ def PA_ax5 (x:Var) : Formula PA_Sig :=
 def PA_ax6 (x y:Var): Formula PA_Sig :=
   Formula.forAll x (Formula.forAll y (Formula.eq (mulT (Term.var x) (S(Term.var y))) (addT (mulT (Term.var x) (Term.var y)) (Term.var x))))
 
+def hasFreeVarTerm : Term PA_Sig → Var → Prop
+| Term.var y, x => y = x
+| Term.const _, _ => False
+| Term.func _ ts, x => ∃ i, hasFreeVarTerm (ts i) x
+
+def hasFreeVar : Formula PA_Sig → Var → Prop
+| Formula.eq t1 t2, x => hasFreeVarTerm t1 x ∨ hasFreeVarTerm t2 x
+| Formula.rel _ ts, x => ∃ i, hasFreeVarTerm (ts i) x
+| Formula.neg φ, x => hasFreeVar φ x
+| Formula.imp φ ψ, x => hasFreeVar φ x ∨ hasFreeVar ψ x
+| Formula.forAll y φ, x => hasFreeVar φ x ∧ x ≠ y
+
+
+def PA_induction (A : Term PA_Sig → Formula PA_Sig) (x y : Var) : Formula PA_Sig :=
+  ((A zero) ⋀ (∀ₚ x (A (Term.var x) ⇒ A (S(Term.var x))))) ⇒ (∀ₚ y (A (Term.var y)))
+
+
+structure FreshVar where
+  next : Nat
+
+def fresh (ctx : FreshVar) : Var × FreshVar :=
+  (ctx.next, { next := ctx.next + 1 })
 
 
 def fin0 : Fin 1 := ⟨0, by decide⟩
@@ -304,6 +327,7 @@ theorem PA_ax1_satisfiable (x : Var) : satisfiable (PA_ax1 x) := by
   rw [eval_succ]
   intro h
   contradiction
+
 theorem PA_ax1_satisfiable2 (x: Var) : ∀ ρ : Env ℕ, evalFormula PA_Std ρ (PA_ax1 x):=by
     intros ρ
     simp [PA_ax1]
@@ -378,3 +402,25 @@ theorem PA_ax6_satisfiable (x y: Var): satisfiable (PA_ax6 x y ) := by
   rw [eval_mul]
   rw [eval_succ]
   apply Nat.mul_succ
+
+
+theorem PA_induction_satisfiable (x y: Var): ∀ A : Term PA_Sig → Formula PA_Sig, satisfiable (PA_induction A x y ) := by
+  unfold satisfiable
+  intros A
+  use PA_Std
+  intros ρ
+  simp [PA_induction]
+  simp [evalFormula]
+  intros h
+  rw [evalFormula_conj] at h
+  have h₀ := h.left
+  have hᵢ := h.right
+  rw [zero] at h₀
+  rw [evalFormula_forAll] at hᵢ
+  intros k
+  specialize hᵢ k
+  rw [evalFormula_imp] at hᵢ
+  induction y with
+  | zero =>
+    rw [] at h₀
+    exact h₀
