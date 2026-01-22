@@ -1,31 +1,34 @@
 import Mathlib.Data.Set.Basic
+import Mathlib.Data.Nat.Basic
 set_option autoImplicit false
 set_option linter.style.longLine false
 set_option linter.style.commandStart false
 set_option linter.style.cdot false
 set_option linter.flexible false
 
-structure Signature where
-  Rel : Type
-  Func  : Type
-  Const : Type
-  arityRel  : Rel → Nat
-  arityFunc : Func → Nat
+inductive Arity
+| unary
+| binary
+deriving DecidableEq, Repr
 
-def Var := Nat
-instance : DecidableEq Var := Nat.decEq
+structure Signature where
+  Func : Type
+  Const : Type
+  arityFunc : Func → Arity
+
+abbrev Var := String
+instance : DecidableEq Var := String.decEq
 
 inductive Term (τ : Signature) where
-| var  : Var → Term τ
+| var   : Var → Term τ
 | const : τ.Const → Term τ
-| func : (f : τ.Func) → (Fin (τ.arityFunc f) → Term τ) → Term τ
-
+| app1  : (f : τ.Func) → (Term τ) → Term τ
+| app2  : (f : τ.Func) → (Term τ) → (Term τ) → Term τ
 
 inductive Formula (τ : Signature) where
-| rel : (r : τ.Rel) → (Fin (τ.arityRel r) → Term τ) → Formula τ
-| eq  : Term τ → Term τ → Formula τ
-| neg : Formula τ → Formula τ
-| imp : Formula τ → Formula τ → Formula τ
+| eq   : Term τ → Term τ → Formula τ
+| neg  : Formula τ → Formula τ
+| imp  : Formula τ → Formula τ → Formula τ
 | forAll : Var → Formula τ → Formula τ
 
 namespace Formula
@@ -54,17 +57,18 @@ end Formula
 
 
 structure Structure (τ : Signature) where
-  U    : Type
+  U : Type
   constInterp : τ.Const → U
-  funcInterp  : (f : τ.Func) → (Fin (τ.arityFunc f) → U) → U
-  relInterp   : (r : τ.Rel) → (Fin (τ.arityRel r) → U) → Prop
+  funcInterp1 : τ.Func → U → U
+  funcInterp2 : τ.Func → U → U → U
 
 def Env (U : Type) := Var → U
 
 def evalTerm {τ : Signature} (M : Structure τ) (ρ : Env M.U) : Term τ → M.U
 | Term.var x     => ρ x
 | Term.const c   => M.constInterp c
-| Term.func f ts => M.funcInterp f (fun i => evalTerm M ρ (ts i))
+| Term.app1 f t    => M.funcInterp1 f (evalTerm M ρ t)
+| Term.app2 f t u  => M.funcInterp2 f (evalTerm M ρ t) (evalTerm M ρ u)
 
 def updateEnv {A : Type} (e : Var → A) (x : Var) (a : A) : Var → A :=
   fun v => if v = x then a else e v
@@ -72,7 +76,6 @@ def updateEnv {A : Type} (e : Var → A) (x : Var) (a : A) : Var → A :=
 
 def evalFormula {τ : Signature} (M : Structure τ) (ρ : Env M.U) : Formula τ → Prop
 | Formula.eq t1 t2   => evalTerm M ρ t1 = evalTerm M ρ t2
-| Formula.rel r ts   => M.relInterp r (fun i => evalTerm M ρ (ts i))
 | Formula.neg φ      => ¬ evalFormula M ρ φ
 | Formula.imp φ ψ    => evalFormula M ρ φ → evalFormula M ρ ψ
 | Formula.forAll x φ => ∀ a : M.U, evalFormula M (updateEnv ρ x a)  φ
@@ -168,55 +171,37 @@ inductive PA_Func
 | mul   -- x * y
 deriving Repr, DecidableEq
 
-inductive PA_Rel
-| eq
-deriving Repr, DecidableEq
 
 def PA_Sig : Signature :=
-{ Rel := PA_Rel,
-  Func := PA_Func,
-  Const := PA_Const,
-  arityRel := fun r =>
-    match r with
-    | PA_Rel.eq => 2,
+{ Const := PA_Const,
+  Func  := PA_Func,
   arityFunc := fun f =>
     match f with
-    | PA_Func.succ => 1
-    | PA_Func.add  => 2
-    | PA_Func.mul  => 2
+    | PA_Func.succ => Arity.unary
+    | PA_Func.add  => Arity.binary
+    | PA_Func.mul  => Arity.binary
 }
-
-
-def x : Term PA_Sig := Term.var Nat.zero
-def y : Term PA_Sig := Term.var (Nat.succ Nat.zero)
-def z : Term PA_Sig := Term.var (Nat.succ (Nat.succ Nat.zero))
-
 
 def zero : Term PA_Sig := Term.const PA_Const.zero
 
 def S (t : Term PA_Sig) : Term PA_Sig :=
-  Term.func PA_Func.succ (fun _ => t)
+  Term.app1 PA_Func.succ t
 
 def addT (t1 t2 : Term PA_Sig) : Term PA_Sig :=
-  Term.func PA_Func.add (fun i => if i.val = 0 then t1 else t2)
+  Term.app2 PA_Func.add t1 t2
+
 
 def mulT (t1 t2 : Term PA_Sig) : Term PA_Sig :=
-  Term.func PA_Func.mul (fun i => if i.val = 0 then t1 else t2)
+  Term.app2 PA_Func.mul t1 t2
+
 
 def eqT (t1 t2 : Term PA_Sig) : Formula PA_Sig :=
-  Formula.rel PA_Rel.eq
-    (fun
-      | ⟨0, _⟩ => t1
-      | ⟨1, _⟩ => t2 )
+  Formula.eq t1 t2
 
 notation "S(" t ")" => S t
 notation t₁ " +ₚ " t₂ => addT t₁ t₂
 notation t₁ " ×ₚ " t₂ => mulT t₁ t₂
 notation t₁ " =ₚ " t₂ => eqT t₁ t₂
-
-
-#check x +ₚ y
-#check S (x)
 
 
 def PA_ax1 (x:Var): Formula PA_Sig :=
@@ -237,49 +222,25 @@ def PA_ax5 (x:Var) : Formula PA_Sig :=
 def PA_ax6 (x y:Var): Formula PA_Sig :=
   Formula.forAll x (Formula.forAll y (Formula.eq (mulT (Term.var x) (S(Term.var y))) (addT (mulT (Term.var x) (Term.var y)) (Term.var x))))
 
-def hasFreeVarTerm : Term PA_Sig → Var → Prop
-| Term.var y, x => y = x
-| Term.const _, _ => False
-| Term.func _ ts, x => ∃ i, hasFreeVarTerm (ts i) x
-
-def hasFreeVar : Formula PA_Sig → Var → Prop
-| Formula.eq t1 t2, x => hasFreeVarTerm t1 x ∨ hasFreeVarTerm t2 x
-| Formula.rel _ ts, x => ∃ i, hasFreeVarTerm (ts i) x
-| Formula.neg φ, x => hasFreeVar φ x
-| Formula.imp φ ψ, x => hasFreeVar φ x ∨ hasFreeVar ψ x
-| Formula.forAll y φ, x => hasFreeVar φ x ∧ x ≠ y
 
 
-def PA_induction (A : Term PA_Sig → Formula PA_Sig) (x y : Var) : Formula PA_Sig :=
-  ((A zero) ⋀ (∀ₚ x (A (Term.var x) ⇒ A (S(Term.var x))))) ⇒ (∀ₚ y (A (Term.var y)))
-
-
-structure FreshVar where
-  next : Nat
-
-def fresh (ctx : FreshVar) : Var × FreshVar :=
-  (ctx.next, { next := ctx.next + 1 })
-
-
-def fin0 : Fin 1 := ⟨0, by decide⟩
-def fin0of2 : Fin 2 := ⟨0, by decide⟩
-def fin1of2 : Fin 2 := ⟨1, by decide⟩
 
 def PA_Std : Structure PA_Sig :=
 { U := Nat,
   constInterp := fun c =>
     match c with
     | PA_Const.zero => 0,
-  funcInterp := fun f args =>
-  match f with
-  | PA_Func.succ => args fin0 + 1
-  | PA_Func.add  => args fin0of2 + args fin1of2
-  | PA_Func.mul  => args fin0of2 * args fin1of2
-  relInterp := fun r args =>
-  match r with
-  | PA_Rel.eq => args fin0of2 = args fin1of2
-
+  funcInterp1 := fun f t =>
+    match f with
+    | PA_Func.succ => Nat.succ t
+    | _ => t,
+  funcInterp2 := fun f t1 t2 =>
+    match f with
+    | PA_Func.add => t1 + t2
+    | PA_Func.mul => t1 * t2
+    | _ => t1
 }
+
 
 def t5 : Term PA_Sig :=
   S (S (S (S (S zero))))
@@ -302,20 +263,6 @@ theorem eval_mul (ρ) (x y) :
 
 theorem eval_eq (ρ) (x y : Term PA_Sig) :
   evalFormula PA_Std ρ (eqT x y) = (evalTerm PA_Std ρ x = evalTerm PA_Std ρ y) := by rfl
-
--- theorem PA_ax1_satisfiable (x: Var) : satisfiable (PA_ax1 x):= by
---   unfold satisfiable
---   let ρ : Env ℕ := fun _ => Nat.zero
---   use PA_Std
---   use ρ
---   simp [PA_ax1]
---   simp [evalFormula]
---   simp [zero]
---   intro a
---   rw [eval_zero]
---   rw [eval_succ]
---   intros h
---   contradiction
 
 theorem PA_ax1_satisfiable (x : Var) : satisfiable (PA_ax1 x) := by
   unfold satisfiable
@@ -404,12 +351,16 @@ theorem PA_ax6_satisfiable (x y: Var): satisfiable (PA_ax6 x y ) := by
   apply Nat.mul_succ
 
 
-theorem PA_induction_satisfiable (x y: Var): ∀ A : Term PA_Sig → Formula PA_Sig, satisfiable (PA_induction A x y ) := by
+def PA_ax7 (x y : Var) (A : Formula PA_Sig) : Formula PA_Sig :=
+  ((A zero) ⋀ ∀ₚ x (A (Term.var x) ⇒ A (S (Term.var x)))) ⇒ ∀ₚ y (A (Term.var y))
+
+
+theorem PA_induction_satisfiable (x y: Var): ∀ A : Term PA_Sig → Formula PA_Sig, satisfiable (PA_ax7 x y A  ) := by
   unfold satisfiable
   intros A
   use PA_Std
   intros ρ
-  simp [PA_induction]
+  simp [PA_ax7]
   simp [evalFormula]
   intros h
   rw [evalFormula_conj] at h
@@ -420,7 +371,98 @@ theorem PA_induction_satisfiable (x y: Var): ∀ A : Term PA_Sig → Formula PA_
   intros k
   specialize hᵢ k
   rw [evalFormula_imp] at hᵢ
-  induction y with
+  induction k with
   | zero =>
-    rw [] at h₀
-    exact h₀
+      exact h₀
+
+theorem A_base (x : Var)(ρ : Env ℕ) : evalFormula PA_Std (updateEnv ρ x Nat.zero) (eqT (addT (Term.var x) zero) (Term.var x)) :=
+by rfl
+
+
+-- theorem PA_ax7_satisfiable (x : Var) (A : Term PA_Sig → Formula PA_Sig)
+--   (h0 : ∀ ρ : Env ℕ, evalFormula PA_Std (updateEnv ρ x Nat.zero) (A (Term.var x)))
+--   (hS : ∀ ρ : Env ℕ, ∀ n : ℕ,
+--           evalFormula PA_Std (updateEnv ρ x n) (A (Term.var x)) →
+--           evalFormula PA_Std (updateEnv ρ x n.succ) (A (Term.var x))) :
+--   ∀ ρ : Env ℕ, evalFormula PA_Std ρ (PA_ax7 x A) := by
+--   intro ρ
+--   simp [PA_ax7, evalFormula]
+--   intro h_conj y
+--   induction y with
+--   | zero =>
+--     specialize h0 ρ
+--     simp
+--     exact h0
+--   | succ n ih =>
+--     have h_step := hS ρ n ih
+--     exact h_step
+
+
+def hasFreeVarTerm : Term PA_Sig → Var → Prop
+| Term.var y, x => y = x
+| Term.const _, _ => False
+| Term.app1 _ ts, x => 
+
+def hasFreeVar : Formula PA_Sig → Var → Prop
+| Formula.eq t1 t2, x => hasFreeVarTerm t1 x ∨ hasFreeVarTerm t2 x
+| Formula.rel _ ts, x => ∃ i, hasFreeVarTerm (ts i) x
+| Formula.neg φ, x => hasFreeVar φ x
+| Formula.imp φ ψ, x => hasFreeVar φ x ∨ hasFreeVar ψ x
+| Formula.forAll y φ, x => hasFreeVar φ x ∧ x ≠ y
+
+
+
+def substTerm (t : Term PA_Sig) (x : Var) (s : Term PA_Sig) : Term PA_Sig :=
+  match t with
+  | Term.var y => if y = x then s else Term.var y
+  | Term.const c => Term.const c
+  | Term.func f args => Term.func f (fun i => substTerm (args i) x s)
+
+
+def renameTerm : Term PA_Sig → Var → Var → Term PA_Sig
+| Term.var x, y, z =>
+    if x = y then Term.var z else Term.var x
+| Term.const c, _, _ =>
+    Term.const c
+| Term.func f ts, y, z =>
+    Term.func f (fun i => renameTerm (ts i) y z)
+
+def renameVar : Formula PA_Sig → Var → Var → Formula PA_Sig
+| Formula.eq t1 t2, y, z =>
+    Formula.eq (renameTerm t1 y z) (renameTerm t2 y z)
+| Formula.rel r ts, y, z =>
+    Formula.rel r (fun i => renameTerm (ts i) y z)
+| Formula.neg φ, y, z =>
+    Formula.neg (renameVar φ y z)
+| Formula.imp φ ψ, y, z =>
+    Formula.imp (renameVar φ y z) (renameVar ψ y z)
+| Formula.forAll x φ, y, z =>
+    if x = y then
+      -- variabila bound x = y → nu renumim
+      Formula.forAll x φ
+    else
+      Formula.forAll x (renameVar φ y z)
+
+
+def freshVar (x : Var) : Var :=
+  x ++ "_1"
+
+
+
+def substFormula (φ : Formula PA_Sig) (x : Var) (s : Term PA_Sig) : Formula PA_Sig :=
+  match φ with
+  | Formula.eq t1 t2 => Formula.eq (substTerm t1 x s) (substTerm t2 x s)
+  | Formula.rel r args => Formula.rel r (fun i => substTerm (args i) x s)
+  | Formula.neg ψ => Formula.neg (substFormula ψ x s)
+  | Formula.imp ψ ξ => Formula.imp (substFormula ψ x s) (substFormula ξ x s)
+  | Formula.forAll y ψ =>
+      if h1 : y = x then
+        -- cazul 1: x este legată -> nu substituim în ψ
+        Formula.forAll y ψ
+      else if h2 : hasFreeVarTerm s y = True then
+        -- cazul 2: variabila y apare liber în s -> risc de captură
+        let z := freshVar (y)  -- trebuie implementat
+        Formula.forAll z (substFormula (renameVar ψ y z) x s)
+      else
+        -- cazul 3: y ≠ x și y nu apare în s -> safe substitution
+        Formula.forAll y (substFormula ψ x s)
