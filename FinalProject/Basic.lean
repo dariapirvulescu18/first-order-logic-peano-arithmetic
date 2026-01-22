@@ -351,118 +351,47 @@ theorem PA_ax6_satisfiable (x y: Var): satisfiable (PA_ax6 x y ) := by
   apply Nat.mul_succ
 
 
-def PA_ax7 (x y : Var) (A : Formula PA_Sig) : Formula PA_Sig :=
-  ((A zero) ⋀ ∀ₚ x (A (Term.var x) ⇒ A (S (Term.var x)))) ⇒ ∀ₚ y (A (Term.var y))
+def PA_ax7 (x  : Var) (A : Term PA_Sig → Formula PA_Sig) : Formula PA_Sig :=
+  ((A zero) ⋀ ∀ₚ x (A (Term.var x) ⇒ A (S (Term.var x)))) ⇒ ∀ₚ x (A (Term.var x))
 
-
-theorem PA_induction_satisfiable (x y: Var): ∀ A : Term PA_Sig → Formula PA_Sig, satisfiable (PA_ax7 x y A  ) := by
-  unfold satisfiable
-  intros A
-  use PA_Std
-  intros ρ
-  simp [PA_ax7]
-  simp [evalFormula]
-  intros h
-  rw [evalFormula_conj] at h
-  have h₀ := h.left
-  have hᵢ := h.right
-  rw [zero] at h₀
-  rw [evalFormula_forAll] at hᵢ
-  intros k
-  specialize hᵢ k
-  rw [evalFormula_imp] at hᵢ
-  induction k with
-  | zero =>
-      exact h₀
+-- theorem PA_induction_satisfiable (x y: Var): ∀ A : Term PA_Sig → Formula PA_Sig, satisfiable (PA_ax7 x y A ) := by
+--   unfold satisfiable
+--   intros A
+--   use PA_Std
+--   intros ρ
+--   simp [PA_ax7]
+--   simp [evalFormula]
+--   intros h
+--   rw [evalFormula_conj] at h
+--   have h₀ := h.left
+--   have hᵢ := h.right
+--   rw [zero] at h₀
+--   rw [evalFormula_forAll] at hᵢ
+--   intros k
+--   specialize hᵢ k
+--   rw [evalFormula_imp] at hᵢ
+--   induction k with
+--   | zero =>
+--       exact h₀
 
 theorem A_base (x : Var)(ρ : Env ℕ) : evalFormula PA_Std (updateEnv ρ x Nat.zero) (eqT (addT (Term.var x) zero) (Term.var x)) :=
 by rfl
 
 
--- theorem PA_ax7_satisfiable (x : Var) (A : Term PA_Sig → Formula PA_Sig)
---   (h0 : ∀ ρ : Env ℕ, evalFormula PA_Std (updateEnv ρ x Nat.zero) (A (Term.var x)))
---   (hS : ∀ ρ : Env ℕ, ∀ n : ℕ,
---           evalFormula PA_Std (updateEnv ρ x n) (A (Term.var x)) →
---           evalFormula PA_Std (updateEnv ρ x n.succ) (A (Term.var x))) :
---   ∀ ρ : Env ℕ, evalFormula PA_Std ρ (PA_ax7 x A) := by
---   intro ρ
---   simp [PA_ax7, evalFormula]
---   intro h_conj y
---   induction y with
---   | zero =>
---     specialize h0 ρ
---     simp
---     exact h0
---   | succ n ih =>
---     have h_step := hS ρ n ih
---     exact h_step
-
-
-def hasFreeVarTerm : Term PA_Sig → Var → Prop
-| Term.var y, x => y = x
-| Term.const _, _ => False
-| Term.app1 _ ts, x => 
-
-def hasFreeVar : Formula PA_Sig → Var → Prop
-| Formula.eq t1 t2, x => hasFreeVarTerm t1 x ∨ hasFreeVarTerm t2 x
-| Formula.rel _ ts, x => ∃ i, hasFreeVarTerm (ts i) x
-| Formula.neg φ, x => hasFreeVar φ x
-| Formula.imp φ ψ, x => hasFreeVar φ x ∨ hasFreeVar ψ x
-| Formula.forAll y φ, x => hasFreeVar φ x ∧ x ≠ y
-
-
-
-def substTerm (t : Term PA_Sig) (x : Var) (s : Term PA_Sig) : Term PA_Sig :=
-  match t with
-  | Term.var y => if y = x then s else Term.var y
-  | Term.const c => Term.const c
-  | Term.func f args => Term.func f (fun i => substTerm (args i) x s)
-
-
-def renameTerm : Term PA_Sig → Var → Var → Term PA_Sig
-| Term.var x, y, z =>
-    if x = y then Term.var z else Term.var x
-| Term.const c, _, _ =>
-    Term.const c
-| Term.func f ts, y, z =>
-    Term.func f (fun i => renameTerm (ts i) y z)
-
-def renameVar : Formula PA_Sig → Var → Var → Formula PA_Sig
-| Formula.eq t1 t2, y, z =>
-    Formula.eq (renameTerm t1 y z) (renameTerm t2 y z)
-| Formula.rel r ts, y, z =>
-    Formula.rel r (fun i => renameTerm (ts i) y z)
-| Formula.neg φ, y, z =>
-    Formula.neg (renameVar φ y z)
-| Formula.imp φ ψ, y, z =>
-    Formula.imp (renameVar φ y z) (renameVar ψ y z)
-| Formula.forAll x φ, y, z =>
-    if x = y then
-      -- variabila bound x = y → nu renumim
-      Formula.forAll x φ
-    else
-      Formula.forAll x (renameVar φ y z)
-
-
-def freshVar (x : Var) : Var :=
-  x ++ "_1"
-
-
-
-def substFormula (φ : Formula PA_Sig) (x : Var) (s : Term PA_Sig) : Formula PA_Sig :=
-  match φ with
-  | Formula.eq t1 t2 => Formula.eq (substTerm t1 x s) (substTerm t2 x s)
-  | Formula.rel r args => Formula.rel r (fun i => substTerm (args i) x s)
-  | Formula.neg ψ => Formula.neg (substFormula ψ x s)
-  | Formula.imp ψ ξ => Formula.imp (substFormula ψ x s) (substFormula ξ x s)
-  | Formula.forAll y ψ =>
-      if h1 : y = x then
-        -- cazul 1: x este legată -> nu substituim în ψ
-        Formula.forAll y ψ
-      else if h2 : hasFreeVarTerm s y = True then
-        -- cazul 2: variabila y apare liber în s -> risc de captură
-        let z := freshVar (y)  -- trebuie implementat
-        Formula.forAll z (substFormula (renameVar ψ y z) x s)
-      else
-        -- cazul 3: y ≠ x și y nu apare în s -> safe substitution
-        Formula.forAll y (substFormula ψ x s)
+theorem PA_ax7_satisfiable (x  : Var) (A : Term PA_Sig → Formula PA_Sig)
+  (h0 : ∀ ρ : Env ℕ, evalFormula PA_Std (updateEnv ρ x Nat.zero) (A (Term.var x)))
+  (hS : ∀ ρ : Env ℕ, ∀ n : ℕ,
+          evalFormula PA_Std (updateEnv ρ x n) (A (Term.var x)) →
+          evalFormula PA_Std (updateEnv ρ x n.succ) (A (Term.var x))) :
+  ∀ ρ : Env ℕ, evalFormula PA_Std ρ (PA_ax7  x  A) := by
+  intro ρ
+  simp [PA_ax7, evalFormula]
+  intro h_conj y
+  induction y with
+  | zero =>
+    specialize h0 ρ
+    simp
+    exact h0
+  | succ n ih =>
+    have h_step := hS ρ n ih
+    exact h_step
