@@ -57,8 +57,8 @@ The development includes:
    - `PA_induction_satisfiable`: Principle of mathematical induction.
 
 7. **Variable Management**:
-   - Functions for detecting free variables: `hasFreeVarTerm` and `hasFreeVar`.
+   - Functions for detecting free variables: `hasFreeVarTerm` and `hasFreeVar` (recursively check whether a variable occurs free in a term or formula).
    - Substitution (`substTerm`, `substFormula`) and renaming (`renameVarInTerm`, `rename`) handle variable capture.
-   - Lemmas like `eval_substTerm` and `eval_substFormula` show that evaluation commutes with substitution.
-
-
+   - Variable sets: `varsOfTerm` and `varsOfFormula` collect all variables present;`boundedVars` collects all variables that are bound by quantifiers.
+   - Fresh variable generation: `freshVarTerm` and `freshVar` produce new variable names based on existing terms or formulas
+   - Lemmas like `eval_substTerm` and `eval_substFormula` prove that evaluating a substituted term or formula is equivalent to updating the environment for the substituted variable.

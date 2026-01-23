@@ -581,6 +581,7 @@ lemma updateEnv_comm {A : Type} (ρ : Var → A) (x y : Var) (vx vy : A) (h : x 
       contradiction
     · simp [hxw, hyw]
 
+--basically updateting something 2 times erases the effects of the fisrt update
 lemma updateEnv_shadow
   {U : Type}
   (ρ : Env U)
