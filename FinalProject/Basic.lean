@@ -397,6 +397,23 @@ def boundedVars : Formula PA_Sig → Set Var
 | Formula.forAll x φ => {x} ∪ (boundedVars φ)
 
 
+  -- def isFreeSubstitution (φ : Formula PA_Sig) (x : Var) (s : Term PA_Sig) : Prop :=
+  -- match φ with
+  -- | Formula.eq t1 t2 => (hasFreeVarTerm t1 x) ∧ (hasFreeVarTerm t2 x)
+  -- | Formula.neg ψ => isFreeSubstitution ψ x s
+    -- have varsOfS := varsOfTerm s
+    -- have condition1 := (varsOfS = ∅) = True
+    -- have varsOfΦ := varsOfFormula φ
+    -- have condition2 := ((varsOfS ∩ varsOfΦ) = ∅) = True
+    -- have boundedVarsOfφ := boundedVars φ
+    -- have condition3 := ((varsOfS ∩ boundedVarsOfφ) = ∅) = True
+    -- have condition4 := ((x ∈ varsOfΦ) = False) = True
+    -- have condition5 := hasFreeVar φ x
+    -- condition1 ∨ condition2 ∨ condition3 ∨ condition4 ∨ condition5
+
+  -- def freshVar (x : Var) : Var :=
+  --   x ++ "_1"
+
 def freshVarTerm : Term PA_Sig → Var
 | Term.var y => y ++ "_1"
 | Term.const _ => "_"
@@ -478,56 +495,112 @@ lemma eval_substTerm (M : Structure PA_Sig) (ρ : Env M.U) (t : Term PA_Sig) (x 
   | app2 f t1 t2 ih1 ih2 =>
       simp [substTerm, evalTerm, ih1, ih2]
 
--- lemma eval_renameVarInTerm
+lemma eval_renameVarInTerm
+  (M : Structure PA_Sig)
+  (ρ : Env M.U)
+  (t : Term PA_Sig)
+  (x y : Var) :
+  evalTerm M ρ (renameVarInTerm t x y) =
+  evalTerm M (updateEnv ρ x (ρ y)) t := by
+  induction t generalizing ρ with
+  | var z =>
+      simp [renameVarInTerm, evalTerm, updateEnv]
+      split
+      · rfl
+      · rfl
+  | const c =>
+      simp [renameVarInTerm, evalTerm]
+  | app1 f t ih =>
+      simp [renameVarInTerm, evalTerm, ih]
+  | app2 f t₁ t₂ ih₁ ih₂ =>
+      simp [renameVarInTerm, evalTerm, ih₁, ih₂]
+
+-- lemma eval_rename
 --   (M : Structure PA_Sig)
 --   (ρ : Env M.U)
---   (t : Term PA_Sig)
+--   (φ : Formula PA_Sig)
 --   (x y : Var) :
---   evalTerm M ρ (renameVarInTerm t x y) =
---   evalTerm M (updateEnv ρ x (ρ y)) t := by
---   induction t generalizing ρ with
---   | var z =>
---       simp [renameVarInTerm, evalTerm, updateEnv]
---       split
---       · rfl
---       · rfl
---   | const c =>
---       simp [renameVarInTerm, evalTerm]
---   | app1 f t ih =>
---       simp [renameVarInTerm, evalTerm, ih]
---   | app2 f t₁ t₂ ih₁ ih₂ =>
---       simp [renameVarInTerm, evalTerm, ih₁, ih₂]
+--   evalFormula M ρ (rename φ x y) =
+--   evalFormula M (updateEnv ρ x (ρ y)) φ := by
+--   induction φ generalizing ρ with
+--   | eq t1 t2 =>
+--       simp [rename, evalFormula, eval_renameVarInTerm]
+--   | neg ψ ih =>
+--       simp [rename, evalFormula, ih]
+--   | imp ψ χ ihψ ihχ =>
+--       simp [rename, evalFormula, ihψ, ihχ]
+--   | forAll z ψ ih =>
+--       simp [rename, evalFormula]
+--       split_ifs
+--       · rename_i h_eq
+--         rw [h_eq]
+--         specialize ih ρ
+--         apply Iff.intro
+--         . intros ip
+--           rw [evalFormula] at ip
+--           intros v
+--           specialize ip v
+--           rw [←h_eq] at ip
 
--- lemma updateEnv_idempotent {A : Type} (ρ : Var → A) (x : Var) :
---   updateEnv ρ x (ρ x) = ρ := by
--- funext v
--- simp [updateEnv]
--- by_cases h : v = x
--- · simp [h]
--- · simp [h]
+--           sorry
+--         . intros ip
+--           intros v
+--           specialize ip v
+--           rw [←h_eq] at ip
+--           sorry
+--       · sorry
 
--- lemma updateEnv_comm {A : Type} (ρ : Var → A) (x y : Var) (vx vy : A) (h : x ≠ y) :
---   updateEnv (updateEnv ρ x vx) y vy = updateEnv (updateEnv ρ y vy) x vx := by
---   funext w
---   simp [updateEnv]
---   by_cases hxw : w = x
---   · by_cases hyw : w = y
---     . rw [hyw]
---       simp
---       intros i1
---       rw [i1] at h
---       contradiction
---     . rw [hxw]
---       simp
---       intros i1
---       contradiction
---   · by_cases hyw : w = y
---     · rw [hyw]
---       simp
---       intros i1
---       rw [i1] at h
---       contradiction
---     · simp [hxw, hyw]
+lemma updateEnv_idempotent {A : Type} (ρ : Var → A) (x : Var) :
+  updateEnv ρ x (ρ x) = ρ := by
+funext v
+simp [updateEnv]
+by_cases h : v = x
+· simp [h]
+· simp [h]
+
+lemma updateEnv_comm {A : Type} (ρ : Var → A) (x y : Var) (vx vy : A) (h : x ≠ y) :
+  updateEnv (updateEnv ρ x vx) y vy = updateEnv (updateEnv ρ y vy) x vx := by
+  funext w
+  simp [updateEnv]
+  by_cases hxw : w = x
+  · by_cases hyw : w = y
+    . rw [hyw]
+      simp
+      intros i1
+      rw [i1] at h
+      contradiction
+    . rw [hxw]
+      simp
+      intros i1
+      contradiction
+  · by_cases hyw : w = y
+    · rw [hyw]
+      simp
+      intros i1
+      rw [i1] at h
+      contradiction
+    · simp [hxw, hyw]
+
+lemma updateEnv_shadow
+  {U : Type}
+  (ρ : Env U)
+  (y : Var)
+  (v₁ v₂ : U) :
+  updateEnv (updateEnv ρ y v₁) y v₂ = updateEnv ρ y v₂ :=
+by
+  funext z
+  unfold updateEnv
+  by_cases h : z = y
+  · simp [h]
+  · simp [h]
+
+-- lemma evalFormula_rename_forall_fresh
+--   (M : Structure PA_Sig)
+--   (ρ : Env M.U)
+--   (ψ : Formula PA_Sig)
+--   (y : Var) :
+--   evalFormula M ρ (rename ψ y (freshVar (∀ₚ y ψ))) =
+--   evalFormula M ρ ψ := by sorry
 
 lemma eval_substFormula (M : Structure PA_Sig) (ρ : Env M.U) (φ : Formula PA_Sig) (x : Var) (s : Term PA_Sig) :
     evalFormula M ρ (substFormula φ x s) = evalFormula M (updateEnv ρ x (evalTerm M ρ s)) φ := by
@@ -539,7 +612,53 @@ lemma eval_substFormula (M : Structure PA_Sig) (ρ : Env M.U) (φ : Formula PA_S
   | imp ψ χ ihψ ihχ =>
       simp [substFormula, evalFormula, ihψ, ihχ]
   | forAll y ψ ih =>
-      sorry
+      simp [evalFormula]
+      constructor
+      . intros ip
+        intros val
+        simp [substFormula] at ip
+        by_cases h_eq : (x=y)
+         --x=y
+        . simp [h_eq] at ip
+          simp [evalFormula] at ip
+          specialize ip val
+          rw [h_eq]
+          specialize ih ρ
+          rw [h_eq] at ih
+          rw [updateEnv_shadow]
+          exact ip
+         --x!=y
+        . have h' : (¬ y = x) := by
+            simpa [eq_comm] using h_eq
+          have ip' : evalFormula M ρ (∀ₚ (freshVar (∀ₚ y ψ)) (substFormula (rename ψ y (freshVar (∀ₚ y ψ))) x s)) := by
+            simpa [h'] using ip
+          simp [evalFormula] at ip'
+          specialize ip' val
+          specialize ih ((updateEnv ρ (freshVar (∀ₚy ψ)) val))
+          have I₁: evalFormula M (updateEnv ρ (freshVar (∀ₚy ψ)) val) (substFormula (rename ψ y (freshVar (∀ₚy ψ))) x s) =
+              evalFormula M (updateEnv (updateEnv ρ x (evalTerm M ρ s) ) (freshVar (∀ₚy ψ)) val) (substFormula ψ y (Term.var (freshVar (∀ₚy ψ)))) := by
+                sorry
+          rw [I₁] at ip'
+          -- right now it's pretty obvious that ip' is actually the goal
+          have obvious : (evalFormula M (updateEnv (updateEnv ρ x (evalTerm M ρ s)) (freshVar (∀ₚy ψ)) val)
+  (substFormula ψ y (Term.var (freshVar (∀ₚy ψ))))) = (evalFormula M (updateEnv (updateEnv ρ x (evalTerm M ρ s)) y val) ψ) := by sorry
+          rw [obvious] at ip'
+          assumption
+      . intros ip
+        simp [substFormula]
+        by_cases h_eq : (x=y)
+        --x=y
+        . simp [h_eq]
+          simp [evalFormula]
+          intros val
+          specialize ip val
+          rw [h_eq] at ip
+          rw [updateEnv_shadow] at ip
+          exact ip
+        --x!=y
+        . have h' : (¬ y = x) := by
+            simpa [eq_comm] using h_eq
+          sorry
 
 -- def PA_ax7 (x  : Var) (A : Formula PA_Sig) : Formula PA_Sig :=
 --     ((substFormula A x zero) ⋀ ∀ₚ x (A ⇒ substFormula A x (S (Term.var x)))) ⇒
@@ -629,3 +748,14 @@ theorem PA_induction_satisfiable (x : Var): ∀ A : Formula PA_Sig, satisfiable 
       . simp [h]
     rw [shadow] at hᵢ
     exact hᵢ
+
+
+
+def ρ : Env ℕ := fun v => if v = "x" then 5 else 0
+#eval ρ "x"   -- expects 5
+#eval ρ "y"   -- expects 0
+#eval (updateEnv (updateEnv ρ "x" Nat.zero) "x" Nat.zero) "x"
+#eval (updateEnv ρ "x" Nat.zero) "x"
+#eval (updateEnv (updateEnv ρ "x" Nat.zero.succ) "x" (Nat.succ (updateEnv ρ "x" Nat.zero.succ "x"))) "x"
+#eval (updateEnv (updateEnv ρ "x" Nat.zero.succ.succ) "x" (ρ "x")) "x"
+#check (Term.var ("x"))
