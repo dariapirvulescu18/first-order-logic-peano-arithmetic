@@ -9,7 +9,7 @@ This repository contains a formalization of **Peano Arithmetic (PA)** in **first
 The main goal of this project is to formalize Peano Arithmetic in first-order logic and verify its correctness in Lean. The formalization follows this approach from *"Logic For Computer Science
 Foundations of Automatic Theorem Proving"* by Jean H. Gallier[Example 5.3.2, reference 3].
 
-![Peano](/final_project/peano.png "Peano Arithmetic")
+![Peano](peano.png "Peano Arithmetic")
 
 
 The development includes:
